@@ -61,7 +61,30 @@ void error( char *fmt, ... )
     fprintf(stderr, "\n");
     exit(1);
 }
+
+// エラー出力用に開始位置を保持する。
+char *user_input;
+/*
+  エラー表示のために入力プログラムの文字列にアクセスするポインタが必要。
+
+  @note 今の状態だとソースは1行なので、1行のことだけを想定できれば良い。
+*/
+void error_at( char *loc, char *fmt, ... )
+{
+    va_list ap;
+    va_start(ap, fmt);
     
+    // オフセットを計算
+    int pos = loc - user_input;
+
+    fprintf(stderr, "%s\n", user_input);
+    fprintf(stderr, "%*s", pos, ""); // pos個の空白を出力
+    fprintf(stderr, "^ ");
+    vfprintf(stderr, fmt, ap);
+    fprintf(stderr, "\n");
+    exit(1);
+}
+
 /*
   次のトークンが期待している記号の時には、トークンを読み進めて真を返す。
   それ以外の場合には偽を返す。
@@ -85,7 +108,7 @@ void expect( char op )
 {
     if( !is_expected_token( op, token ) )
     {
-        error("not '%c'.", op);
+        error_at(token->str, "not '%c'.", op);
     }
     token = token->next;
 }
@@ -98,7 +121,7 @@ int expect_number()
 {
     if( token->kind != TK_NUM )
     {
-        error("not number.");
+        error_at(token->str, "not number.");
     }
     int val = token->val;
     token = token->next;
@@ -163,7 +186,7 @@ Token *tokenize( char *p )
         }
 
         // 解釈できない系列はここでエラーに落とす。
-        error("トークナイズできません。");
+        error_at(p, "トークナイズできません。");
     }
 
     // EOFは必ず要素として持っているように。
@@ -178,6 +201,9 @@ int main( int argc, char **argv )
         fprintf( stderr, "invalid argments num.\n" );
         return 1;
     }
+
+    // エラー出力ように開始位置をコピー。
+    user_input = argv[1];
 
     //トークナイズする。
     // tokenは出現順にリスト構造をとる。ここで先頭の要素がtokenに代入される。
@@ -199,10 +225,16 @@ int main( int argc, char **argv )
             continue;
         }
 
-        // +さもなくば-
-        expect( '-' );
-        printf("  sub rax, %d\n", expect_number());
-        
+        if( consume( '-' ) )
+        {
+            printf("  sub rax, %d\n", expect_number());
+            continue;
+        }
+
+        if( NULL != token )
+        {
+            error_at(token->str, "unexpected token.");
+        }
     }
 
     printf("  ret\n");
