@@ -171,7 +171,8 @@ Token *tokenize( char *p )
         }
 
         // 演算子はトークンとして登録
-        if( *p == '+' || *p == '-' )
+        if( *p == '+' || *p == '-' ||  *p == '*' || *p == '/'
+            || *p == '(' || *p == ')' )
         {
             cur = new_token(TK_RESERVED, cur, p++);
             continue;
@@ -194,6 +195,167 @@ Token *tokenize( char *p )
     return head.next;
 }
 
+// ここからは構文解析の処理
+
+// 抽象構文木のノードの種類
+typedef enum {
+    ND_ADD, // +
+    ND_SUB, // -
+    ND_MUL, // *
+    ND_DIV, // /
+    ND_NUM, // 整数
+} NodeKind;
+
+typedef struct Node Node;
+
+// 抽象構文木のノードの型
+struct Node
+{
+    NodeKind kind; // ノードの型
+    Node    *lhs;  // 左辺
+    Node    *rhs;  // 右辺
+    int      val;  // kindがND_NUMの場合のみ使う
+};
+
+/*
+  ノード作成
+ */
+Node *new_node(NodeKind kind, Node *lhs, Node *rhs)
+{
+    Node *node = calloc(1, sizeof(Node));
+    node->kind = kind;
+    node->lhs  = lhs;
+    node->rhs  = rhs;
+    //fprintf(stderr, "new node %d\n", kind);
+    return node;
+}
+
+/*
+  数値ノードの作成
+ */
+Node *new_node_num(int val)
+{
+    Node *node = calloc(1, sizeof(Node));
+    node->kind = ND_NUM;
+    node->val = val;
+    node->rhs = NULL;
+    node->lhs = NULL;
+    //fprintf(stderr, "new num node %d\n", val);
+    return node;
+}
+
+// 構文規則に沿って関数を定義(再帰下降構文解析法の実装)
+
+// 前方宣言
+Node *expr();
+
+//primary = num | "(" expr ")"
+Node *primary()
+{
+    // 次のトークンが"("なら"(" expr ")"のはず。
+    if( consume('(' ) )
+    {
+        Node *node = expr();
+        expect(')');
+        return node;
+    }
+
+    // それ以外なら数値のはず
+    return new_node_num( expect_number() );
+}
+
+// mul  = primary ("*" primary | "/" primary)*
+Node *mul()
+{
+    Node *node = primary();
+
+    for(;;)
+    {
+        if( consume('*') )
+        {
+            node = new_node( ND_MUL, node, primary() );
+        }
+        else if( consume('/') )
+        {
+            node = new_node( ND_DIV, node, primary() );
+        }
+        else
+        {
+            return node;
+        }
+    }
+}
+
+// expr = mul ("+" mul | "-" mul)*
+Node *expr()
+{
+    Node *node = mul();
+
+    for(;;)
+    {
+        if( consume('+') )
+        {
+            node = new_node(ND_ADD, node, mul());
+        }
+        else if( consume('-') )
+        {
+            node = new_node(ND_SUB, node, mul());
+        }
+        else
+        {
+            return node;
+        }
+    }
+}
+
+/*
+  ASTからアセンブリコードを出力
+ */
+void gen( Node *node, int layer )
+{
+    ++layer;
+    //fprintf(stderr, "layer %d\n", layer);
+
+    if( node->kind == ND_NUM )
+    {
+        printf("  push %d\n", node->val);
+        return;
+    }
+
+    //fprintf(stderr, "trace : %d\n", node->kind);
+
+    // 左右のノードから先にトラバースする。
+    gen( node->lhs, layer );
+    gen( node->rhs, layer );
+
+    // popして
+    printf("  pop rdi\n");
+    printf("  pop rax\n");
+
+    // 演算する。
+    switch( node->kind )
+    {
+    case ND_ADD:
+        printf("  add rax, rdi\n");
+        break;
+
+    case ND_SUB:
+        printf("  sub rax, rdi\n");
+        break;
+
+    case ND_MUL:
+        printf("  imul rax, rdi\n");
+        break;
+
+    case ND_DIV:
+        printf("  cqo\n");      // RAXを128bitに拡張してRDX|RAXとしてセット
+        printf("  idiv rdi\n"); // (RDX|RAX)/RDI = RAX ... RDX
+        break;
+    }
+
+    printf("  push rax\n");
+}
+
 int main( int argc, char **argv )
 {
     if( argc != 2 )
@@ -214,29 +376,14 @@ int main( int argc, char **argv )
     printf(".global main\n");
     printf("main:\n");
 
-    // 最初に数字がきている前提
-    printf("  mov rax, %d\n", expect_number());
+    // ASTに。
+    Node *root = expr();
 
-    while( !at_eof() )
-    {
-        if( consume( '+' ) )
-        {
-            printf("  add rax, %d\n", expect_number());
-            continue;
-        }
+    // スタックマシンを使う形でアセンブリ化
+    gen( root, 0 );
 
-        if( consume( '-' ) )
-        {
-            printf("  sub rax, %d\n", expect_number());
-            continue;
-        }
-
-        if( NULL != token )
-        {
-            error_at(token->str, "unexpected token.");
-        }
-    }
-
+    // 返り値を設定
+    printf("  pop rax\n");
     printf("  ret\n");
     return 0;
 }
