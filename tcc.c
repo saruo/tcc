@@ -21,6 +21,7 @@ struct Token{
     Token    *next; // 次の入力トークン
     int       val;  // kindがTK_NUMの場合、その数値
     char     *str;  // トークン文字列
+    int       len;  // トークン文字列の長さ
 };
 
 // 現在着目しているトークン
@@ -36,10 +37,12 @@ void dump_token( Token *i_token )
 /*
   想定どおりのトークンか？
  */
-bool is_expected_token( char op, Token *i_token )
+bool is_expected_token( char *op, Token *i_token )
 {
     if( i_token->kind != TK_RESERVED ||
-        i_token->str[0] != op )
+        strlen(op) != i_token->len ||
+        0 != memcmp(i_token->str, op, token->len) // 一致するなら0なので
+        )
     {
         return false;
     }
@@ -89,7 +92,7 @@ void error_at( char *loc, char *fmt, ... )
   次のトークンが期待している記号の時には、トークンを読み進めて真を返す。
   それ以外の場合には偽を返す。
  */
-bool consume( char op )
+bool consume( char *op )
 {
     if( !is_expected_token( op, token ) )
     {
@@ -104,7 +107,7 @@ bool consume( char op )
   次のトークンが期待している記号の時には、トークンを1つ読み進める。
   それ以外の場合にはエラーを報告する。
  */
-void expect( char op )
+void expect( char *op )
 {
     if( !is_expected_token( op, token ) )
     {
@@ -139,11 +142,12 @@ bool at_eof()
 /*
   新しいトークンを作成してcurにつなげる。
  */
-Token *new_token( TokenKind kind, Token *cur, char* str )
+Token *new_token( TokenKind kind, Token *cur, char* str, int length )
 {
     Token *tok = calloc(1, sizeof(Token));
     tok->kind = kind;
     tok->str = str;
+    tok->len = length; // とりあえず一律入れてみる。
     cur->next = tok;
 
     // TODO : valもなんかの値で初期化しとかないとなんとなく気持ち悪いけど。
@@ -171,17 +175,52 @@ Token *tokenize( char *p )
         }
 
         // 演算子はトークンとして登録
-        if( *p == '+' || *p == '-' ||  *p == '*' || *p == '/'
-            || *p == '(' || *p == ')' )
+        if( *p == '=' && *(p+1) == '=' )
         {
-            cur = new_token(TK_RESERVED, cur, p++);
+            cur = new_token(TK_RESERVED, cur, p, 2);
+            p += 2;
+            continue;
+        }
+        else if( *p == '!' && *(p+1) == '=' )
+        {
+            cur = new_token(TK_RESERVED, cur, p, 2);
+            p += 2;
+            continue;
+        }
+        else if( *p == '<' )
+        {
+            if( *(p+1) == '=' )
+            {
+                cur = new_token(TK_RESERVED, cur, p, 2);
+                p += 2;
+            }else{
+                cur = new_token(TK_RESERVED, cur, p++, 1);
+            }
+            continue;
+        }
+        else if( *p == '>' )
+        {
+            if( *(p+1) == '=' )
+            {
+                cur = new_token(TK_RESERVED, cur, p, 2);
+                p += 2;
+            }else{
+                cur = new_token(TK_RESERVED, cur, p++, 1);
+            }
+            continue;
+        }
+        else if( *p == '+' || *p == '-' ||  *p == '*' || *p == '/'
+            || *p == '(' || *p == ')'
+            )
+        {
+            cur = new_token(TK_RESERVED, cur, p++, 1);
             continue;
         }
 
         // 数字も個別にトークンとして登録
         if( isdigit(*p) )
         {
-            cur = new_token(TK_NUM, cur, p);
+            cur = new_token(TK_NUM, cur, p, 0);
             cur->val = strtol( p, &p, 10);
             continue;
         }
@@ -191,7 +230,7 @@ Token *tokenize( char *p )
     }
 
     // EOFは必ず要素として持っているように。
-    new_token(TK_EOF, cur, p);
+    new_token(TK_EOF, cur, p, 0);
     return head.next;
 }
 
@@ -199,6 +238,10 @@ Token *tokenize( char *p )
 
 // 抽象構文木のノードの種類
 typedef enum {
+    ND_EQU, // ==
+    ND_NEQ, // !=
+    ND_LTH, // <
+    ND_LEQ, // <=
     ND_ADD, // +
     ND_SUB, // -
     ND_MUL, // *
@@ -253,10 +296,10 @@ Node *expr();
 Node *primary()
 {
     // 次のトークンが"("なら"(" expr ")"のはず。
-    if( consume('(' ) )
+    if( consume("(" ) )
     {
         Node *node = expr();
-        expect(')');
+        expect(")");
         return node;
     }
 
@@ -268,11 +311,11 @@ Node *primary()
 // unary = ("+" | "-")? unary
 Node *unary()
 {
-    if( consume('+') )
+    if( consume("+") )
     {
         return unary();
     }
-    else if ( consume('-') )
+    else if ( consume("-") )
     {
         // 0 - Xとすることで、符号を反転させる。
         return new_node(ND_SUB, new_node_num(0), unary());
@@ -286,15 +329,91 @@ Node *mul()
 {
     Node *node = unary();
 
-    for(;;)
+    for(;;) // * => 0回以上の繰り返し
     {
-        if( consume('*') )
+        if( consume("*") )
         {
             node = new_node( ND_MUL, node, unary() );
         }
-        else if( consume('/') )
+        else if( consume("/") )
         {
             node = new_node( ND_DIV, node, unary() );
+        }
+        else
+        {
+            return node;
+        }
+    }
+}
+
+// add = mul ( "+" mul | "-" mul )*
+Node *add()
+{
+    Node *node = mul();
+
+    for(;;) // * => 0回以上の繰り返し
+    {
+        if( consume("+") )
+        {
+            node = new_node( ND_ADD, node, mul() );
+        }
+        else if( consume("-") )
+        {
+            node = new_node( ND_SUB, node, mul() );
+        }
+        else
+        {
+            return node;
+        }
+    }
+}
+
+// relational = add ( "<" add | "<=" add | ">" add | ">=" add )*
+Node *relational()
+{
+    Node *node = add();
+
+    for(;;) // * => 0回以上の繰り返し
+    {
+        if( consume("<") )
+        {
+            node = new_node( ND_LTH, node, add() );
+        }
+        else if( consume("<=") )
+        {
+            node = new_node( ND_LEQ, node, add() );
+        }
+        if( consume(">") )
+        {
+            // 専用の演算として定義するのではなく、両辺を入れ替える。
+            node = new_node( ND_LEQ, add(), node );
+        }
+        else if( consume(">=") )
+        {
+            // 専用の演算として定義するのではなく、両辺を入れ替える。
+            node = new_node( ND_LTH, add(), node );
+        }
+        else
+        {
+            return node;
+        }
+    }
+}
+
+// equality = relational ("==" relational | "!=" relational)*
+Node *equality()
+{
+    Node *node = relational();
+
+    for(;;) // * => 0回以上の繰り返し
+    {
+        if( consume("==") )
+        {
+            node = new_node( ND_EQU, node, relational() );
+        }
+        else if( consume("!=") )
+        {
+            node = new_node( ND_NEQ, node, relational() );
         }
         else
         {
@@ -306,23 +425,8 @@ Node *mul()
 // expr = mul ("+" mul | "-" mul)*
 Node *expr()
 {
-    Node *node = mul();
-
-    for(;;)
-    {
-        if( consume('+') )
-        {
-            node = new_node(ND_ADD, node, mul());
-        }
-        else if( consume('-') )
-        {
-            node = new_node(ND_SUB, node, mul());
-        }
-        else
-        {
-            return node;
-        }
-    }
+    // この層は冗長な気がするけど、意味のわかりやすさのために残してある？
+    return equality();
 }
 
 /*
@@ -367,6 +471,31 @@ void gen( Node *node, int layer )
     case ND_DIV:
         printf("  cqo\n");      // RAXを128bitに拡張してRDX|RAXとしてセット
         printf("  idiv rdi\n"); // (RDX|RAX)/RDI = RAX ... RDX
+        break;
+
+        // 比較
+    case ND_EQU: // "=="
+        printf("  cmp rax, rdi\n");
+        printf("  sete al\n");
+        printf("  movzb rax, al\n");
+        break;
+
+    case ND_NEQ: // "!="
+        printf("  cmp rax, rdi\n");
+        printf("  setne al\n");
+        printf("  movzb rax, al\n");
+        break;
+
+    case ND_LTH: // "<"
+        printf("  cmp rax, rdi\n");
+        printf("  setl al\n");
+        printf("  movzb rax, al\n");
+        break;
+
+    case ND_LEQ: // "<="
+        printf("  cmp rax, rdi\n");
+        printf("  setle al\n");
+        printf("  movzb rax, al\n");
         break;
     }
 
