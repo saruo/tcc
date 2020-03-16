@@ -1,28 +1,15 @@
+/**
+ * 構文解析コード
+ */
+
+#include "tcc.h"
+
 #include <ctype.h>
 #include <stdarg.h>
 #include <stdbool.h>
+#include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
-
-// トークンの種類
-typedef enum
-{
-    TK_RESERVED, // 記号
-    TK_NUM,      // 整数トークン
-    TK_EOF,      // 入力の終わりを表すトークン
-} TokenKind;
-
-typedef struct Token Token;
-
-// トークン型
-struct Token{
-    TokenKind kind; // トークンの型
-    Token    *next; // 次の入力トークン
-    int       val;  // kindがTK_NUMの場合、その数値
-    char     *str;  // トークン文字列
-    int       len;  // トークン文字列の長さ
-};
 
 // 現在着目しているトークン
 Token *token;
@@ -156,6 +143,7 @@ Token *new_token( TokenKind kind, Token *cur, char* str, int length )
 
     return tok;
 }
+
 /*
   入力文字列pをトークナイズしてそれを返す。
 */
@@ -236,30 +224,6 @@ Token *tokenize( char *p )
 
 // ここからは構文解析の処理
 
-// 抽象構文木のノードの種類
-typedef enum {
-    ND_EQU, // ==
-    ND_NEQ, // !=
-    ND_LTH, // <
-    ND_LEQ, // <=
-    ND_ADD, // +
-    ND_SUB, // -
-    ND_MUL, // *
-    ND_DIV, // /
-    ND_NUM, // 整数
-} NodeKind;
-
-typedef struct Node Node;
-
-// 抽象構文木のノードの型
-struct Node
-{
-    NodeKind kind; // ノードの型
-    Node    *lhs;  // 左辺
-    Node    *rhs;  // 右辺
-    int      val;  // kindがND_NUMの場合のみ使う
-};
-
 /*
   ノード作成
  */
@@ -288,9 +252,6 @@ Node *new_node_num(int val)
 }
 
 // 構文規則に沿って関数を定義(再帰下降構文解析法の実装)
-
-// 前方宣言
-Node *expr();
 
 //primary = num | "(" expr ")"
 Node *primary()
@@ -429,107 +390,3 @@ Node *expr()
     return equality();
 }
 
-/*
-  ASTからアセンブリコードを出力
- */
-void gen( Node *node, int layer )
-{
-    ++layer;
-    //fprintf(stderr, "layer %d\n", layer);
-
-    if( node->kind == ND_NUM )
-    {
-        printf("  push %d\n", node->val);
-        return;
-    }
-
-    //fprintf(stderr, "trace : %d\n", node->kind);
-
-    // 左右のノードから先にトラバースする。
-    gen( node->lhs, layer );
-    gen( node->rhs, layer );
-
-    // popして
-    printf("  pop rdi\n");
-    printf("  pop rax\n");
-
-    // 演算する。
-    switch( node->kind )
-    {
-    case ND_ADD:
-        printf("  add rax, rdi\n");
-        break;
-
-    case ND_SUB:
-        printf("  sub rax, rdi\n");
-        break;
-
-    case ND_MUL:
-        printf("  imul rax, rdi\n");
-        break;
-
-    case ND_DIV:
-        printf("  cqo\n");      // RAXを128bitに拡張してRDX|RAXとしてセット
-        printf("  idiv rdi\n"); // (RDX|RAX)/RDI = RAX ... RDX
-        break;
-
-        // 比較
-    case ND_EQU: // "=="
-        printf("  cmp rax, rdi\n");
-        printf("  sete al\n");
-        printf("  movzb rax, al\n");
-        break;
-
-    case ND_NEQ: // "!="
-        printf("  cmp rax, rdi\n");
-        printf("  setne al\n");
-        printf("  movzb rax, al\n");
-        break;
-
-    case ND_LTH: // "<"
-        printf("  cmp rax, rdi\n");
-        printf("  setl al\n");
-        printf("  movzb rax, al\n");
-        break;
-
-    case ND_LEQ: // "<="
-        printf("  cmp rax, rdi\n");
-        printf("  setle al\n");
-        printf("  movzb rax, al\n");
-        break;
-    }
-
-    printf("  push rax\n");
-}
-
-int main( int argc, char **argv )
-{
-    if( argc != 2 )
-    {
-        fprintf( stderr, "invalid argments num.\n" );
-        return 1;
-    }
-
-    // エラー出力ように開始位置をコピー。
-    user_input = argv[1];
-
-    //トークナイズする。
-    // tokenは出現順にリスト構造をとる。ここで先頭の要素がtokenに代入される。
-    token = tokenize( argv[1] );
-
-    // アセンブラの出力
-    printf(".intel_syntax noprefix\n");
-    printf(".global main\n");
-    printf("main:\n");
-
-    // ASTに。
-    Node *root = expr();
-
-    // スタックマシンを使う形でアセンブリ化
-    gen( root, 0 );
-
-    // 返り値を設定
-    printf("  pop rax\n");
-    printf("  ret\n");
-    return 0;
-}
