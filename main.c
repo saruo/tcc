@@ -17,20 +17,39 @@ int main( int argc, char **argv )
     //トークナイズする。
     // tokenは出現順にリスト構造をとる。ここで先頭の要素がtokenに代入される。
     token = tokenize( argv[1] );
+    //dump_tokens( token );
+
+    // 文ごとにASTに。
+    program();
 
     // アセンブラの出力
     printf(".intel_syntax noprefix\n");
     printf(".global main\n");
     printf("main:\n");
 
-    // ASTに。
-    Node *root = expr();
+    // プロローグ
+    // 変数26個分の領域を確保する。
+    printf("  push rbp\n");     // 
+    printf("  mov rbp, rsp\n"); // 次のスタックフレームのrbpを指すように。
+    printf("  sub rsp, %d\n", 26 * 8); // 26も自分のローカル変数の領域を事前に確保。
+    
+    // 先頭の式から順にコード生成
+    // @todo 要範囲チェック
+    for( int i = 0; code[i]; ++i )
+    {
+        gen( code[i], 0 );
 
-    // スタックマシンを使う形でアセンブリ化
-    gen( root, 0 );
+        // 式の評価結果として、スタックに1つの値が残っている
+        // はずなので、スタックが煽れないようにポップしておく。
+        printf("  pop rax\n");
+    }
 
-    // 返り値を設定
-    printf("  pop rax\n");
+    // エピローグ
+    // 最後の式の結果がRAXに残っているので、それが返り値になる。
+    printf("  mov rsp, rbp\n"); // rspとrbpが同じ位置を指す。
+    printf("  pop rbp\n");      // rbpに前のスタックフレームのrbpの値を書き込む。
+    // スタックトップが前のスタックフレームのrspの位置なので、そこを指すように。
     printf("  ret\n");
+
     return 0;
 }

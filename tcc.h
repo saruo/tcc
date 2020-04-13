@@ -6,6 +6,7 @@
 typedef enum
 {
     TK_RESERVED, // 記号
+    TK_IDENT,    // 識別子
     TK_NUM,      // 整数トークン
     TK_EOF,      // 入力の終わりを表すトークン
 } TokenKind;
@@ -23,15 +24,17 @@ struct Token{
 
 // 抽象構文木のノードの種類
 typedef enum {
-    ND_EQU, // ==
-    ND_NEQ, // !=
-    ND_LTH, // <
-    ND_LEQ, // <=
-    ND_ADD, // +
-    ND_SUB, // -
-    ND_MUL, // *
-    ND_DIV, // /
-    ND_NUM, // 整数
+    ND_EQU,    // ==
+    ND_NEQ,    // !=
+    ND_LTH,    // <
+    ND_LEQ,    // <=
+    ND_ADD,    // +
+    ND_SUB,    // -
+    ND_MUL,    // *
+    ND_DIV,    // /
+    ND_ASSIGN, // =
+    ND_LVAR,   // ローカル変数
+    ND_NUM,    // 整数
 } NodeKind;
 
 typedef struct Node Node;
@@ -43,6 +46,7 @@ struct Node
     Node    *lhs;  // 左辺
     Node    *rhs;  // 右辺
     int      val;  // kindがND_NUMの場合のみ使う
+    int      offset; // kindがND_LVARの場合のみ使う
 };
 
 // -- parser.c --
@@ -53,14 +57,25 @@ extern Token *token;
 // エラー出力用に開始位置を保持する。
 extern char *user_input;
 
+// プログラム全体を保存するための、グローバル変数。
+// 文から作ったASTのROOTを順番に入れていく。
+#define CodeSize 100
+extern Node *code[CodeSize];
+
+// エラーを報告するための関数。
+void error( char *fmt, ... );
+
 /*
   入力文字列pをトークナイズしてそれを返す。
 */
 Token *tokenize( char *p );
 
-// expr = mul ("+" mul | "-" mul)*
-Node *expr();
+// トークンの系列をデバッグ表示
+void dump_tokens(Token *i_token);
 
+// 文ごとにASTに。
+// program    = stmt*
+void program();
 
 
 // -- codegen.c --

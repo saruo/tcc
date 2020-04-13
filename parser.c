@@ -14,6 +14,10 @@
 // 現在着目しているトークン
 Token *token;
 
+// プログラム全体を保存するための、グローバル変数。
+// 文から作ったASTのROOTを順番に入れていく。
+Node *code[CodeSize];
+
 /*
   トークンの情報をダンプする。
  */
@@ -76,49 +80,6 @@ void error_at( char *loc, char *fmt, ... )
 }
 
 /*
-  次のトークンが期待している記号の時には、トークンを読み進めて真を返す。
-  それ以外の場合には偽を返す。
- */
-bool consume( char *op )
-{
-    if( !is_expected_token( op, token ) )
-    {
-        return false;
-    }
-
-    token = token->next;
-    return true;
-}
-
-/*
-  次のトークンが期待している記号の時には、トークンを1つ読み進める。
-  それ以外の場合にはエラーを報告する。
- */
-void expect( char *op )
-{
-    if( !is_expected_token( op, token ) )
-    {
-        error_at(token->str, "not '%c'.", op);
-    }
-    token = token->next;
-}
-
-/*
-  次のトークンが数値の場合、トークンを1つ読み進めてその数値を返す。
-  それ以外の場合はエラーを報告する。
-*/
-int expect_number()
-{
-    if( token->kind != TK_NUM )
-    {
-        error_at(token->str, "not number.");
-    }
-    int val = token->val;
-    token = token->next;
-    return val;
-}
-
-/*
   入力の最後か？
  */
 bool at_eof()
@@ -163,10 +124,18 @@ Token *tokenize( char *p )
         }
 
         // 演算子はトークンとして登録
-        if( *p == '=' && *(p+1) == '=' )
+        if( *p == '=' )
         {
-            cur = new_token(TK_RESERVED, cur, p, 2);
-            p += 2;
+            if( *(p+1) == '=' )
+            {
+                cur = new_token(TK_RESERVED, cur, p, 2);
+                p += 2;
+            }else
+            {
+                // それ以外は代入と判定。
+                cur = new_token(TK_RESERVED, cur, p++, 1);
+            }
+            
             continue;
         }
         else if( *p == '!' && *(p+1) == '=' )
@@ -198,13 +167,22 @@ Token *tokenize( char *p )
             continue;
         }
         else if( *p == '+' || *p == '-' ||  *p == '*' || *p == '/'
-            || *p == '(' || *p == ')'
+                 || *p == '(' || *p == ')'
+                 || *p == ';'
             )
         {
             cur = new_token(TK_RESERVED, cur, p++, 1);
             continue;
         }
 
+        // 小文字のa-z1文字を変数として使えるように。
+        if( 'a' <= *p && *p <= 'z' )
+        {
+            cur = new_token(TK_IDENT, cur, p++, 1);
+            cur->len = 1;
+            continue;
+        }
+            
         // 数字も個別にトークンとして登録
         if( isdigit(*p) )
         {
@@ -220,6 +198,15 @@ Token *tokenize( char *p )
     // EOFは必ず要素として持っているように。
     new_token(TK_EOF, cur, p, 0);
     return head.next;
+}
+
+// トークンの系列をデバッグ表示
+void dump_tokens(Token *i_token)
+{
+    for( Token *a_token = i_token; a_token; a_token = a_token->next )
+    {
+        fprintf(stderr, "token : %d\n", a_token->kind);
+    }
 }
 
 // ここからは構文解析の処理
@@ -251,11 +238,96 @@ Node *new_node_num(int val)
     return node;
 }
 
+/*
+  変数ノードの作成
+ */
+Node *new_node_ident(char *str)
+{
+    Node *node = calloc(1, sizeof(Node));
+    node->kind = ND_LVAR;
+    node->offset = (str[0] - 'a'+1) * 8; // とりあえずオフセットを決め打ちで入れておく。
+    node->rhs = NULL;
+    node->lhs = NULL;
+    return node;
+}
+
+/*
+  次のトークンが期待している記号の時には、トークンを読み進めて真を返す。
+  それ以外の場合には偽を返す。
+
+  consumeは消費しない場合も処理を進める場合に使う。
+  逆に消費しないと継続できないような場合はexpectを使って、失敗したらエラーで止める。
+ */
+bool consume( char *op )
+{
+    if( !is_expected_token( op, token ) )
+    {
+        return false;
+    }
+
+    token = token->next;
+    return true;
+}
+
+/*
+  次のトークンが変数の場合は1つ進めてそれを返す。
+  トークンでないときはNULLを返す。
+ */
+Node *consume_ident()
+{
+    if( token->kind != TK_IDENT )
+    {
+        return NULL;
+    }
+    Node *node = new_node_ident(token->str);
+    token = token->next;
+    return node;
+}
+
+/*
+  次のトークンが期待している記号の時には、トークンを1つ読み進める。
+  それ以外の場合にはエラーを報告する。
+ */
+void expect( char *op )
+{
+    if( !is_expected_token( op, token ) )
+    {
+        error_at(token->str, "expected '%c'(%d), but '%c'(%d).",
+                 *op, *op, *token->str, *token->str);
+    }
+    token = token->next;
+}
+
+/*
+  次のトークンが数値の場合、トークンを1つ読み進めてその数値を返す。
+  それ以外の場合はエラーを報告する。
+*/
+int expect_number()
+{
+    if( token->kind != TK_NUM )
+    {
+        error_at(token->str, "not number.");
+    }
+    int val = token->val;
+    token = token->next;
+    return val;
+}
+
 // 構文規則に沿って関数を定義(再帰下降構文解析法の実装)
 
-//primary = num | "(" expr ")"
+// 前方宣言
+// expr = assign
+Node *expr();
+
+//primary = num | ident | "(" expr ")"
 Node *primary()
 {
+    Node *node = consume_ident();
+    if( node )
+    {
+        return node;
+    }
+        
     // 次のトークンが"("なら"(" expr ")"のはず。
     if( consume("(" ) )
     {
@@ -383,10 +455,40 @@ Node *equality()
     }
 }
 
-// expr = mul ("+" mul | "-" mul)*
+// assign = equality ("=" assign)?
+Node *assign()
+{
+    Node *node = equality();
+    if( consume("=") )
+    {
+        node = new_node( ND_ASSIGN, node, assign() );
+    }
+    return node;
+}
+
+// expr = assign
 Node *expr()
 {
     // この層は冗長な気がするけど、意味のわかりやすさのために残してある？
-    return equality();
+    return assign();
 }
 
+// stmt       = expr ";"
+Node *stmt()
+{
+    Node *node = expr();
+    expect(";");
+    return node;
+}
+
+// 文ごとにASTに。
+// program    = stmt*
+void program()
+{
+    int i = 0;
+    while( !at_eof() )
+    {
+        code[ i++ ] = stmt();
+    }
+    code[ i ] = NULL;
+}
