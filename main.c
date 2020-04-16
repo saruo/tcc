@@ -20,6 +20,10 @@ int main( int argc, char **argv )
     //dump_tokens( token );
 
     // 文ごとにASTに。
+
+    // 関数に入るときに初期化される想定だと思うが、ひとまずここに置いておく。
+    locals = NULL;
+
     program();
 
     // アセンブラの出力
@@ -31,7 +35,8 @@ int main( int argc, char **argv )
     // 変数26個分の領域を確保する。
     printf("  push rbp\n");     // 
     printf("  mov rbp, rsp\n"); // 次のスタックフレームのrbpを指すように。
-    printf("  sub rsp, %d\n", 26 * 8); // 26も自分のローカル変数の領域を事前に確保。
+    int lvar_offset = (locals == NULL ? 0 : locals->offset+8);
+    printf("  sub rsp, %d\n", lvar_offset);
     
     // 先頭の式から順にコード生成
     // @todo 要範囲チェック

@@ -22,6 +22,21 @@ struct Token{
     int       len;  // トークン文字列の長さ
 };
 
+typedef struct LVar LVar;
+
+// ローカル変数の型
+struct LVar
+{
+    LVar *next; // 次の変数かNULL
+    char *name; // 変数名
+    int   len;  // 名前の長さ
+    int   offset; // RBPからのオフセット(RBPって？)
+};
+
+// ローカル変数(のリスト)
+// 常に先頭を指す実装
+extern LVar *locals;
+
 // 抽象構文木のノードの種類
 typedef enum {
     ND_EQU,    // ==
@@ -48,6 +63,7 @@ struct Node
     int      val;  // kindがND_NUMの場合のみ使う
     int      offset; // kindがND_LVARの場合のみ使う
 };
+
 
 // -- parser.c --
 

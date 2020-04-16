@@ -238,17 +238,24 @@ Node *new_node_num(int val)
     return node;
 }
 
+// ローカル変数(のリスト)
+// 常に先頭を指す実装
+LVar *locals;
+
 /*
-  変数ノードの作成
+  変数を名前で検索する。見つからなかった場合はNULLを返す。
  */
-Node *new_node_ident(char *str)
+LVar *find_lvar(Token *tok)
 {
-    Node *node = calloc(1, sizeof(Node));
-    node->kind = ND_LVAR;
-    node->offset = (str[0] - 'a'+1) * 8; // とりあえずオフセットを決め打ちで入れておく。
-    node->rhs = NULL;
-    node->lhs = NULL;
-    return node;
+    for ( LVar *var = locals; var; var = var->next )
+    {
+        if( var->len == tok->len && !memcmp( tok->str, var->name, var->len ) )
+        {
+            return var;
+        }
+    }
+
+    return NULL;
 }
 
 /*
@@ -279,7 +286,33 @@ Node *consume_ident()
     {
         return NULL;
     }
-    Node *node = new_node_ident(token->str);
+    
+    // まずはノードを作る
+    Node *node = calloc(1, sizeof(Node));
+    node->kind = ND_LVAR;
+
+    LVar *lvar = find_lvar( token );
+    if( lvar )
+    {
+        // すでに追加済みの変数であれば、アクセスに必要なオフセットを設定しておく。
+        node->offset = lvar->offset;
+    }else{
+        // ない場合は作って初期設定をおこなう
+        lvar = calloc(1, sizeof(LVar));
+        lvar->next = locals;
+        lvar->name = token->str;
+        lvar->len  = token->len;
+        lvar->offset = locals == NULL ? 0 : locals->offset + 8;
+        node->offset = lvar->offset;
+
+        // 最終的に先頭にインサート。offset的には先頭ほど値が大きくなる。
+        locals = lvar;
+
+        // callocで０初期化済みだが念のため
+        node->rhs = NULL;
+        node->lhs = NULL;
+    }
+
     token = token->next;
     return node;
 }
