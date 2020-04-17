@@ -106,6 +106,36 @@ Token *new_token( TokenKind kind, Token *cur, char* str, int length )
 }
 
 /*
+  isdigitと同じノリで、先頭文字を見て変数かどうかを判定。
+ */
+bool is_ident(char c)
+{
+    return ( 'a' <= c && c <= 'z' );
+}
+
+/*
+  strtolと同じノリで識別子名の長さだけ、ポインタを進める。
+  @return 識別子の文字数
+*/
+int str_to_ident( char *start, char **end )
+{
+    int count = 0;
+    if( NULL != start && NULL != end )
+    {
+        for( ; is_ident(*start ); ++start, ++count ){}
+        if( 0 == count )
+        {
+            error_at( start, "ident is not ident ..." );
+        }
+        *end = start;
+    }else{
+        // NULLがきてる時点でフォロー不能なので即終了で。
+        error("#include <string.h> is null.");
+    }
+    return count;
+}
+
+/*
   入力文字列pをトークナイズしてそれを返す。
 */
 Token *tokenize( char *p )
@@ -176,10 +206,10 @@ Token *tokenize( char *p )
         }
 
         // 小文字のa-z1文字を変数として使えるように。
-        if( 'a' <= *p && *p <= 'z' )
+        if( is_ident( *p ) )
         {
-            cur = new_token(TK_IDENT, cur, p++, 1);
-            cur->len = 1;
+            cur = new_token(TK_IDENT, cur, p, 1);
+            cur->len = str_to_ident( p, &p );
             continue;
         }
             

@@ -50,5 +50,12 @@ try 110 'a = 11; z = 10; a*z;'
 try 11 'a = 110; z = 10; a/z;'
 # まだ負数は扱えない。
 # try "-100" 'a = 10; z = 110; a-z;'
+
+# 複数文字識別子
+try 120 'ab = 10; zy = 110; ab+zy;'
+try 100 'ab = 110; zy = 10; ab-zy;'
+try 110 'ab = 11; zy = 10; ab*zy;'
+try 11 'ab = 110; zy = 10; ab/zy;'
+try 6 'foo = 1; bar = 2 + 3; foo + bar;'
 echo OK
 
