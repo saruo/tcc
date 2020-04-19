@@ -106,11 +106,30 @@ Token *new_token( TokenKind kind, Token *cur, char* str, int length )
 }
 
 /*
+  アルファベット？
+ */
+bool is_alpha( char c )
+{
+   return 'a' <= c && c <= 'z'
+       || 'A' <= c && c <= 'Z';
+ }
+/*
+  アルファベットまたは数値またはアンダーバー?
+ */
+bool is_alnum( char c )
+{
+    return is_alpha( c )
+        || isdigit( c )
+        || c == '_';
+}
+
+/*
   isdigitと同じノリで、先頭文字を見て変数かどうかを判定。
  */
 bool is_ident(char c)
 {
-    return ( 'a' <= c && c <= 'z' );
+    return is_alpha( c )
+        || c == '_';
 }
 
 /*
@@ -122,11 +141,16 @@ int str_to_ident( char *start, char **end )
     int count = 0;
     if( NULL != start && NULL != end )
     {
-        for( ; is_ident(*start ); ++start, ++count ){}
-        if( 0 == count )
+        // 1文字目だけは特別対応
+        if( is_ident( *start ) )
         {
+            ++count;
+            ++start;
+            for( ; is_alnum( *start ); ++start, ++count ){}
+        }else{
             error_at( start, "ident is not ident ..." );
         }
+        for( ; is_ident(*start ); ++start, ++count ){}
         *end = start;
     }else{
         // NULLがきてる時点でフォロー不能なので即終了で。
@@ -205,6 +229,18 @@ Token *tokenize( char *p )
             continue;
         }
 
+        // return
+        if( strncmp( p, "return", 6 ) == 0
+            && !is_alnum( *(p+6) ) //  returnXXXみたいな識別子を間違えてトークナイズしないように。
+            )
+        {
+            // 予約語トークンとして処理
+            cur = new_token( TK_RESERVED, cur, p, 0 );
+            cur->len = 6;
+            p += 6;
+            continue;
+        }
+            
         // 小文字のa-z1文字を変数として使えるように。
         if( is_ident( *p ) )
         {
@@ -222,7 +258,7 @@ Token *tokenize( char *p )
         }
 
         // 解釈できない系列はここでエラーに落とす。
-        error_at(p, "トークナイズできません。");
+        error_at(p, "トークナイズできません。(*p = %c(%d))", *p, *p);
     }
 
     // EOFは必ず要素として持っているように。
@@ -537,9 +573,16 @@ Node *expr()
 }
 
 // stmt       = expr ";"
+//            = | return expr ";"
 Node *stmt()
 {
-    Node *node = expr();
+    Node *node = NULL;
+    if( consume("return") )
+    {
+        node = new_node( ND_RETURN, expr(), NULL );
+    }else{
+        node = expr();
+    }
     expect(";");
     return node;
 }

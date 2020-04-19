@@ -36,6 +36,7 @@ void gen( Node *node, int layer )
     ++layer;
     //fprintf(stderr, "layer %d\n", layer);
 
+    // まずはleafとして使われるノード種別
     switch( node->kind )
     {
     case ND_NUM:
@@ -50,8 +51,13 @@ void gen( Node *node, int layer )
         printf("  mov rax, [rax]\n");
         printf("  push rax\n");
         return;
+    }
 
-    case ND_ASSIGN:
+    //fprintf(stderr, "trace : %d\n", node->kind);
+
+    // leafをもっているが、leafからのアセンブラの生成が特殊になるパターン
+    if ( node->kind ==  ND_ASSIGN )
+    {
         gen_lval( node->lhs, layer );
         gen( node->rhs, layer );
 
@@ -63,8 +69,19 @@ void gen( Node *node, int layer )
         printf("  push rdi\n");
         return;
     }
+    if( node->kind == ND_RETURN )
+    {
+        gen( node->lhs, layer );
+        // 右側は何もない。
 
-    //fprintf(stderr, "trace : %d\n", node->kind);
+        printf("  pop rax\n");
+        printf("  mov rsp, rbp\n");
+        printf("  pop rbp\n");
+        printf("  ret\n");
+        return;
+    }
+
+    // 以降はleafをもっているノードの処理
 
     // 左右のノードから先にトラバースする。
     gen( node->lhs, layer );

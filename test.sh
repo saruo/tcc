@@ -57,5 +57,7 @@ try 100 'ab = 110; zy = 10; ab-zy;'
 try 110 'ab = 11; zy = 10; ab*zy;'
 try 11 'ab = 110; zy = 10; ab/zy;'
 try 6 'foo = 1; bar = 2 + 3; foo + bar;'
+try 6 'foo = 1; bar = 2 + 3; return foo + bar;'
+try 5 'foo = 1; return bar = 2 + 3; return foo + bar;'
 echo OK
 
