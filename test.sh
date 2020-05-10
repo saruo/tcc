@@ -59,5 +59,14 @@ try 11 'ab = 110; zy = 10; ab/zy;'
 try 6 'foo = 1; bar = 2 + 3; foo + bar;'
 try 6 'foo = 1; bar = 2 + 3; return foo + bar;'
 try 5 'foo = 1; return bar = 2 + 3; return foo + bar;'
+
+# if文
+try 1 'foo = 1; if ( foo == 1 ) foo;'
+try 2 'foo = 1; if ( foo == 1 ) foo + 1;'
+try 5 'foo = 1; if ( foo == 1 ) bar = 2 + 3;'
+try 1 'foo = 1; if ( foo != 1 ) bar = 2 + 3; else foo;'
+try 6 "`cat test/if_0.c`"
+
+
 echo OK
 

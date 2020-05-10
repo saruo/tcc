@@ -5,7 +5,7 @@
 #include "tcc.h"
 
 #include <stdio.h>
-
+#include <stdbool.h>
 /*
   変数のアドレスをスタックにpush
   この後実行するコードでは、変数を扱う(アドレスが入っている)ことを
@@ -28,6 +28,48 @@ void gen_lval(Node *node, int layer )
     printf("  push rax\n");
 }
 
+bool gen_if(Node *node, int layer)
+{
+    if( node->kind == ND_IF )
+    {
+        // まず、条件式の処理を行う
+        gen( node->lhs, layer );
+
+        // スタックトップに結果が入っているはず。
+        printf("  pop rax\n");
+        printf("  cmp rax, 0\n");
+        static int jump_label_index = 0; // ラベルはif文の数に合わせて適切に設定されている必要がある。
+        // ifの中で一貫した番号である必要がある。ifの中でifみたいなことが起こる可能性があるので、ここで確定させておく。
+        ++jump_label_index; 
+
+        // とりあえず、elseのラベルは必ず経由するようにしておく。
+        printf("  je  .Lelse%03d\n", jump_label_index);
+
+        // if文本体のコード
+        Node *body = node->rhs;
+        if( body == NULL || body->kind != ND_IFBODY )
+        {
+            error("if文の本体がありません。");
+            // exitでおわる。
+        }
+        gen( body->lhs, layer );
+
+        printf(".Lelse%03d:\n", jump_label_index);    
+        
+        // 右側はelse
+        Node *else_node = body->rhs;
+        if( else_node != NULL )
+        {
+            gen( else_node->lhs, layer );
+        }
+
+        // 戻り値をraxに書き込んでエピローグと同じ処理を走らせる。
+        printf(".Lend%03d:\n", jump_label_index);
+
+        return true;
+    }
+   return false;
+}
 /*
   ASTからアセンブリコードを出力
  */
@@ -74,10 +116,15 @@ void gen( Node *node, int layer )
         gen( node->lhs, layer );
         // 右側は何もない。
 
+        // 戻り値をraxに書き込んでエピローグと同じ処理を走らせる。
         printf("  pop rax\n");
         printf("  mov rsp, rbp\n");
         printf("  pop rbp\n");
         printf("  ret\n");
+        return;
+    }
+    if( gen_if(node, layer) )
+    {
         return;
     }
 

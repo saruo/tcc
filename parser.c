@@ -159,6 +159,25 @@ int str_to_ident( char *start, char **end )
     return count;
 }
 
+// 予約語識別子を登録する
+// regist_reserved_token( &cur, &p, "return", 6 )
+bool regist_reserved_token( Token **cur, char **program_str, char *ident, int ident_length )
+{
+    if( cur && program_str && ident )
+    {
+        if( strncmp( *program_str, ident, ident_length ) == 0
+            && !is_alnum( *(*program_str+ident_length) ) //  returnXXXみたいな識別子を間違えてトークナイズしないように。
+            )
+        {
+            // 予約語トークンとして処理
+            *cur = new_token( TK_RESERVED, *cur, *program_str, 0 );
+            (*cur)->len = ident_length;
+            *program_str += ident_length;
+            return true;;
+        }
+    }
+    return false;
+}
 /*
   入力文字列pをトークナイズしてそれを返す。
 */
@@ -223,6 +242,7 @@ Token *tokenize( char *p )
         else if( *p == '+' || *p == '-' ||  *p == '*' || *p == '/'
                  || *p == '(' || *p == ')'
                  || *p == ';'
+                 || *p == '{' || *p == '}'
             )
         {
             cur = new_token(TK_RESERVED, cur, p++, 1);
@@ -230,17 +250,21 @@ Token *tokenize( char *p )
         }
 
         // return
-        if( strncmp( p, "return", 6 ) == 0
-            && !is_alnum( *(p+6) ) //  returnXXXみたいな識別子を間違えてトークナイズしないように。
-            )
+        if( regist_reserved_token( &cur, &p, "return", 6 ) )
         {
-            // 予約語トークンとして処理
-            cur = new_token( TK_RESERVED, cur, p, 0 );
-            cur->len = 6;
-            p += 6;
             continue;
         }
-            
+
+        // if, else
+        if( regist_reserved_token( &cur, &p, "if", 2 ) )
+        {
+            continue;
+        }
+        if( regist_reserved_token( &cur, &p, "else", 4 ) )
+        {
+            continue;
+        }
+
         // 小文字のa-z1文字を変数として使えるように。
         if( is_ident( *p ) )
         {
@@ -573,17 +597,47 @@ Node *expr()
 }
 
 // stmt       = expr ";"
-//            = | return expr ";"
+//              | "if" "(" expr ")" stmpt ( "else" stmp )?
+//              | "return" expr ";"
 Node *stmt()
 {
     Node *node = NULL;
+
+#if 0 // デバッグ用のコード
+    if( TK_RESERVED == token->kind )
+    {
+        fprintf(stderr, "-- stmt start token is \"%c%c...\"  --\n", token->str[0], token->str[1]);
+    }
+#endif
     if( consume("return") )
     {
         node = new_node( ND_RETURN, expr(), NULL );
-    }else{
-        node = expr();
+        expect(";");
     }
-    expect(";");
+    else if( consume("if") )
+    {
+        //fputs("if ---- ", stderr);
+        expect("(");
+        node = new_node( ND_IF, expr(), NULL );
+        expect(")");
+
+        // 本体
+        // lhsには、条件が入るので、右に繋ぐ。
+        // 直接stmtをぶら下げるとelseをつけるところがなくなるので、専用ノードを追加。
+        // ここらへんのセオリーみたいなものはあるのだろうか。
+        Node *body_node = new_node( ND_IFBODY, stmt(), NULL );
+        node->rhs = body_node ;
+
+        // elseがある
+        if( consume("else") )
+        {
+            body_node->rhs = new_node( ND_ELSE, stmt(), NULL );
+        }
+    }
+    else{
+        node = expr();
+        expect(";");
+    }
     return node;
 }
 
