@@ -59,14 +59,24 @@ try 11 'ab = 110; zy = 10; ab/zy;'
 try 6 'foo = 1; bar = 2 + 3; foo + bar;'
 try 6 'foo = 1; bar = 2 + 3; return foo + bar;'
 try 5 'foo = 1; return bar = 2 + 3; return foo + bar;'
+try 2 'foo = 1; foo = foo + 1;'
+try 1 'foo = 1; foo < 10;'
+try 1 'foo = 2; foo < 10;'
 
 # if文
 try 1 'foo = 1; if ( foo == 1 ) foo;'
 try 2 'foo = 1; if ( foo == 1 ) foo + 1;'
 try 5 'foo = 1; if ( foo == 1 ) bar = 2 + 3;'
 try 1 'foo = 1; if ( foo != 1 ) bar = 2 + 3; else foo;'
+try 1 'foo = 1; if ( foo < 1 ) bar = 2 + 3; else foo;'
+try 3 'foo = 1; if ( foo < 10 ) foo = foo + 1; if ( foo < 10 ) foo = foo + 1;'
 try 6 "`cat test/if_0.c`"
 
+# while文
+# +=, ++は未実装
+try 10 'foo = 2; while( foo < 10 ) foo = foo + 1;foo;'
+try 10 'foo = 1; while( foo < 10 ) foo = foo + 1;foo;'
+try 10 'foo = 1; while( foo < 10 ) foo = foo + 1;'
 
 echo OK
 

@@ -264,6 +264,10 @@ Token *tokenize( char *p )
         {
             continue;
         }
+        if( regist_reserved_token( &cur, &p, "while", 5 ) )
+        {
+            continue;
+        }
 
         // 小文字のa-z1文字を変数として使えるように。
         if( is_ident( *p ) )
@@ -598,6 +602,7 @@ Node *expr()
 
 // stmt       = expr ";"
 //              | "if" "(" expr ")" stmpt ( "else" stmp )?
+//              | "while" "(" expr ")" stmt
 //              | "return" expr ";"
 Node *stmt()
 {
@@ -633,6 +638,13 @@ Node *stmt()
         {
             body_node->rhs = new_node( ND_ELSE, stmt(), NULL );
         }
+    }
+    else if( consume("while") )
+    {
+        expect("(");
+        Node *cond = expr();
+        expect(")");
+        node = new_node( ND_WHILE, cond, stmt() );
     }
     else{
         node = expr();

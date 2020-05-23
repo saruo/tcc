@@ -70,6 +70,38 @@ bool gen_if(Node *node, int layer)
     }
    return false;
 }
+
+bool gen_while(Node *node, int layer)
+{
+    if( node->kind == ND_WHILE )
+    {
+        static int jump_label_index = 0; // ラベルはwhile文の数に合わせて適切に設定されている必要がある。
+        // ここで足しておく理由はif文処理出力部分のコメントを参照。
+        ++jump_label_index; 
+
+        // 繰り返し用ラベル
+        printf(".Lwhilebegin%03d:\n", jump_label_index);    
+
+        // 条件式の処理を行う
+        gen( node->lhs, layer );
+
+        // スタックトップに結果が入っているはず。
+        printf("  pop rax\n");
+        printf("  cmp rax, 0\n");
+
+        // 偽ならジャンプ
+        printf("  je  .Lwhileend%03d\n", jump_label_index);
+
+        gen( node->rhs, layer );
+
+        printf("  jmp  .Lwhilebegin%03d\n", jump_label_index);
+
+        printf(".Lwhileend%03d:\n", jump_label_index);    
+        
+        return true;
+    }
+   return false;
+}
 /*
   ASTからアセンブリコードを出力
  */
@@ -124,6 +156,11 @@ void gen( Node *node, int layer )
         return;
     }
     if( gen_if(node, layer) )
+    {
+        return;
+    }
+
+    if( gen_while(node, layer) )
     {
         return;
     }
