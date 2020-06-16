@@ -32,7 +32,6 @@ int main( int argc, char **argv )
     printf("main:\n");
 
     // プロローグ
-    // 変数26個分の領域を確保する。
     printf("  push rbp\n");     // 
     printf("  mov rbp, rsp\n"); // 次のスタックフレームのrbpを指すように。
     int lvar_offset = (locals == NULL ? 0 : locals->offset+8);
@@ -40,6 +39,7 @@ int main( int argc, char **argv )
     
     // 先頭の式から順にコード生成
     // @todo 要範囲チェック
+    printf("# proc start\n");
     for( int i = 0; code[i]; ++i )
     {
         gen( code[i], 0 );

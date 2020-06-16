@@ -268,6 +268,10 @@ Token *tokenize( char *p )
         {
             continue;
         }
+        if( regist_reserved_token( &cur, &p, "for", 3 ) )
+        {
+            continue;
+        }
 
         // 小文字のa-z1文字を変数として使えるように。
         if( is_ident( *p ) )
@@ -392,6 +396,8 @@ Node *consume_ident()
         node->offset = lvar->offset;
     }else{
         // ない場合は作って初期設定をおこなう
+        //fprintf(stderr, "add local var %s\n", token->str);
+
         lvar = calloc(1, sizeof(LVar));
         lvar->next = locals;
         lvar->name = token->str;
@@ -601,8 +607,9 @@ Node *expr()
 }
 
 // stmt       = expr ";"
-//              | "if" "(" expr ")" stmpt ( "else" stmp )?
+//              | "if" "(" expr ")" stmt ( "else" stmp )?
 //              | "while" "(" expr ")" stmt
+//              | "for" "(" expr? ";" expr? ";" expr? ")" stmt
 //              | "return" expr ";"
 Node *stmt()
 {
@@ -645,6 +652,27 @@ Node *stmt()
         Node *cond = expr();
         expect(")");
         node = new_node( ND_WHILE, cond, stmt() );
+    }
+    else if( consume("for") )
+    {
+        expect("(");
+        Node *init = expr();
+        expect(";");
+        Node *cond = expr();
+        expect(";");
+        Node *update = expr();
+        expect(")");
+        node = new_node( ND_FOR,
+                         new_node( ND_FOR_INIT,
+                                   init,
+                                   new_node(ND_FOR_COND,
+                                            cond,
+                                            new_node(ND_FOR_UPD,
+                                                     update,
+                                                     NULL )
+                                       )
+                             )
+                         , stmt() );
     }
     else{
         node = expr();

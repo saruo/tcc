@@ -8,7 +8,9 @@ try() {
     input="$2"
 
     ./tcc "$input" > tmp.s
-    gcc -o tmp tmp.s
+
+    # -gでデバッグ情報を付与しておく。
+    gcc -g -o tmp tmp.s
     ./tmp
     actual="$?"
 
@@ -56,6 +58,8 @@ try 120 'ab = 10; zy = 110; ab+zy;'
 try 100 'ab = 110; zy = 10; ab-zy;'
 try 110 'ab = 11; zy = 10; ab*zy;'
 try 11 'ab = 110; zy = 10; ab/zy;'
+try 1 'foo = 1; bar = 2 + 3; foo;'
+try 5 'foo = 1; bar = 2 + 3; bar;'
 try 6 'foo = 1; bar = 2 + 3; foo + bar;'
 try 6 'foo = 1; bar = 2 + 3; return foo + bar;'
 try 5 'foo = 1; return bar = 2 + 3; return foo + bar;'
@@ -76,7 +80,11 @@ try 6 "`cat test/if_0.c`"
 # +=, ++は未実装
 try 10 'foo = 2; while( foo < 10 ) foo = foo + 1;foo;'
 try 10 'foo = 1; while( foo < 10 ) foo = foo + 1;foo;'
-try 10 'foo = 1; while( foo < 10 ) foo = foo + 1;'
+# while文の評価結果は条件文のところがかえるように。
+try 0 'foo = 1; while( foo < 10 ) foo = foo + 1;'
 
+# for文
+try 10 'foo = 0; for( i = 0; i < 10; i = i+1 ) foo = foo + 1; foo;'
+# try 10 'foo = 0; for( i = 0; i < 10; ++i ) foo = foo + 1; foo;'
 echo OK
 

@@ -63,7 +63,6 @@ bool gen_if(Node *node, int layer)
             gen( else_node->lhs, layer );
         }
 
-        // 戻り値をraxに書き込んでエピローグと同じ処理を走らせる。
         printf(".Lend%03d:\n", jump_label_index);
 
         return true;
@@ -88,20 +87,104 @@ bool gen_while(Node *node, int layer)
         // スタックトップに結果が入っているはず。
         printf("  pop rax\n");
         printf("  cmp rax, 0\n");
-
+              
         // 偽ならジャンプ
         printf("  je  .Lwhileend%03d\n", jump_label_index);
 
         gen( node->rhs, layer );
 
+        // 式の結果は捨てる(while分の結果は条件式の結果、ということにする。)
+        printf("  pop rax\n");
+
         printf("  jmp  .Lwhilebegin%03d\n", jump_label_index);
 
         printf(".Lwhileend%03d:\n", jump_label_index);    
-        
+
+        // 比較結果をpush
+        printf("  push rax\n");
+
         return true;
     }
    return false;
 }
+
+bool gen_for(Node *node, int layer)
+{
+    if( node->kind == ND_FOR )
+    {
+        static int jump_label_index = 0; // ラベルはwhile文の数に合わせて適切に設定されている必要がある。
+        // ここで足しておく理由はif文処理出力部分のコメントを参照。
+        ++jump_label_index; 
+
+        // 初期化(最初だけlhsに入っているの、今となってはちょっと気持ち悪いけど。。)
+        Node *init = NULL;
+        if( init = node->lhs )
+        {
+            if( init->kind != ND_FOR_INIT )
+            {
+                error("forのinitが想定されます。");
+            }
+
+            printf("# for init\n");
+            gen( init->lhs, layer );
+
+            // 式の結果は捨てる(for分の結果は条件式の結果、ということにする。)
+            printf("  pop rax\n");
+
+            Node *cond = NULL;
+            if( cond = init->rhs )
+            {
+                if( cond->kind != ND_FOR_COND )
+                {
+                    error("forのconditionが想定されます。");
+                }
+
+                // 繰り返し用ラベル
+                printf(".Lforbegin%03d:\n", jump_label_index);    
+
+                // 条件式本体
+                gen( cond->lhs, layer );
+
+                // スタックトップに結果が入っているはず。
+                printf("  pop rax\n");
+                printf("  cmp rax, 0\n");
+
+                // 偽ならジャンプ
+                printf("  je  .Lforend%03d\n", jump_label_index);
+
+                // ここに処理本体
+                gen( node->rhs, layer );
+                // 式の結果は捨てる(for分の結果は条件式の結果、ということにする。)
+                printf("  pop rax\n");
+
+                // 最後に更新処理
+                Node *upd = NULL;
+                if( upd = cond->rhs )
+                {
+                    if( upd->kind != ND_FOR_UPD )
+                    {
+                        error("forのupdateが想定されます。");
+                    }
+
+                    printf("# for update\n");
+                    gen( upd->lhs, layer );
+                    // 式の結果は捨てる(for分の結果は条件式の結果、ということにする。)
+                    printf("  pop rax\n");
+                }
+                printf("  jmp  .Lforbegin%03d\n", jump_label_index);
+
+                printf(".Lforend%03d:\n", jump_label_index);    
+        
+                // 比較結果をpush
+                printf("  push rax\n");
+                return true;
+            }
+        }
+    }
+   return false;
+}
+
+
 /*
   ASTからアセンブリコードを出力
  */
@@ -161,6 +244,11 @@ void gen( Node *node, int layer )
     }
 
     if( gen_while(node, layer) )
+    {
+        return;
+    }
+
+    if( gen_for(node, layer) )
     {
         return;
     }

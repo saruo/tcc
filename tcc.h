@@ -55,6 +55,10 @@ typedef enum {
     ND_IFBODY, // if本体
     ND_ELSE,   // else
     ND_WHILE,  // while
+    ND_FOR,    // for
+    ND_FOR_INIT, // for初期化
+    ND_FOR_COND, // for条件
+    ND_FOR_UPD,  // for更新
 } NodeKind;
 
 typedef struct Node Node;
